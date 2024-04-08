@@ -18,17 +18,46 @@ def inference(input_text):
 model_id = "NexaAIDev/Octopus-v2"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-# Check if MPS device is available
+# Check if Metal device is available
 if torch.backends.mps.is_available():
     device = torch.device("mps")
 else:
-    device = torch.device("cpu")
+    raise ValueError("Metal device not found. This code requires a compatible Apple device with Metal support.")
 
-model = GemmaForCausalLM.from_pretrained(model_id)
-model.to(device)
+try:
+    model = GemmaForCausalLM.from_pretrained(model_id)
+    model.to(device)
+except Exception as e:
+    print(f"Error loading model: {e}")
+    exit(1)
 
 input_text = "Take a selfie for me with front camera"
-nexa_query = f"Below is the query from the users, please call the correct function and generate the parameters to call the function.\n\nQuery: {input_text} \n\nResponse:"
+
+# Validate input text
+max_length = 1000
+if not input_text.strip():
+    raise ValueError("Input text cannot be empty.")
+if len(input_text) > max_length:
+    raise ValueError(f"Input text cannot exceed {max_length} characters.")
+
+nexa_query = f"""Below is a query from the user. Please respond with the name of the function to call and the parameters to pass to it, formatted as a Python dictionary like:
+{{
+  "function": "function_name",
+  "parameters": {{
+    "param1": "value1",
+    "param2": "value2"
+  }}  
+}}
+
+User Query: {input_text}
+
+Response:
+"""
+
 start_time = time.time()
-print("nexa model result:\n", inference(nexa_query))
-print("latency:", time.time() - start_time, " s")
+try:
+    result = inference(nexa_query)
+    print("Nexa model result:\n", result["output"])
+    print("Latency:", result["latency"], "s")
+except Exception as e:
+    print(f"Error during inference: {e}")
